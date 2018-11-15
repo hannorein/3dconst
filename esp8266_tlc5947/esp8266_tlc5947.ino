@@ -39,7 +39,7 @@ void wait(){
   delayMicroseconds(10);
 }
 
-void write12bit(long value){
+void write12bit(unsigned int value){
   for (int i=11;i>=0;i--){
     digitalWrite(SIN, (value>>i)&1);
     wait();
@@ -57,16 +57,27 @@ void latch(){
   wait(); 
 }
 
+#define NLED 12
 float fade = 0.;
 int starmode = 0;
 
+float wave_inset = 10;
 float wave_x = 0;
-float wave_max = 15.; 
-float wave_dx = 0.1;
+float wave_dx = 0.025;
+float wave_width = 1.;
+
+unsigned int led_values[NLED]; 
 
 void loop() {
-  if (wave_x>wave_max){
-       
+  wave_x += wave_dx;
+  if (wave_x>NLED+wave_inset){
+       wave_x = -wave_inset;
+  }
+  for(int i=0;i<NLED;i++){
+    led_values[i] = floor(4095.*exp(-(i-wave_x)*(i-wave_x)/(wave_width*wave_width)));
+  }
+  for(int i=0;i<NLED;i++){
+    write12bit(led_values[i]);
   }
   
   latch();
