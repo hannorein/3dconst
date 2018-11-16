@@ -1,25 +1,13 @@
 #define SCLK 5
 #define SIN 4
 #define XLAT 0
-#define BLANK 2
+#define BLANK 2  // also LED (low = on)
 
-int Nstars = 8;
-float starsmag[] = {3.3, 0.5, 1.6, 2.23, 1.7, 1.77, 0.1, 2.09}; // top to bottom
-float starsmagabs[] = {-4.25, -5.85, -2.78, -5.8, -6.89, -6, -7.84, -6.1 }; // top to bottom
 
-float dimmer = .5;
-float mag2flux(float mag){
-  return dimmer*pow(2.512,-mag)*4000.;
-}
-
-float magabs2flux(float mag){
-  return dimmer*pow(2.512,-mag)*2.9;
-}
 
 void setup() {
   Serial.begin(115200);
   Serial.write("Startup...\n");
-  // put your setup code here, to run once:
   pinMode(SCLK, OUTPUT);  
   pinMode(SIN, OUTPUT);  
   pinMode(XLAT, OUTPUT);  
@@ -57,71 +45,75 @@ void latch(){
   wait(); 
 }
 
-#define NLED 12
-float fade = 0.;
+#define NSTARS 12
+#define NLED 16
+#define LED_OFFSET 4
+
+float flux_on_earth[NSTARS] = {2243, 1470, 1139, 1795, 1158, 2199, 4095, 1928, 1052, 3677, 2288, 1453};
+float flux_from_fixed_distance[NSTARS] = {4095, 2619, 1286, 1526, 952, 1488, 2478, 1017, 328, 680, 136, 11};
+float flux_zero[NSTARS] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
 int starmode = 0;
 
-float wave_inset = 10;
-float wave_x = 0;
+float wave_inset = 10.;
+float wave_x = 0.;
 float wave_dx = 0.025;
 float wave_width = 1.;
 
-unsigned int led_values[NLED]; 
+float fade_x;
+int fade(float from[NSTARS],float to[NSTARS], unsigned int* out, float dx){
+  for (int i=0;i<NSTARS;i++){
+    out[i+LED_OFFSET] = from[i]*(1.-fade_x)+to[i]*fade_x;
+  }
+  
+  fade_x += dx;
+  if (fade_x>=1.){
+    fade_x = 0.;
+    return 1;
+  }else{
+    return 0;
+  }
+}
 
+
+unsigned int led_values[NLED]; 
 void loop() {
-  wave_x += wave_dx;
-  if (wave_x>NLED+wave_inset){
-       wave_x = -wave_inset;
+
+  switch (starmode){
+    case 0: // Wave Left to Right
+      wave_x += wave_dx;
+      for(int i=0;i<NSTARS;i++){
+        led_values[i+LED_OFFSET] = floor(4095.*exp(-(i-wave_x)*(i-wave_x)/(wave_width*wave_width)));
+      }
+      if (wave_x>NSTARS+wave_inset){
+        wave_x = -wave_inset;
+        starmode++;
+      }
+      break;
+    case 1: 
+      starmode += fade(flux_zero,flux_on_earth, led_values, 0.01);
+      break;
+    case 2: 
+      starmode += fade(flux_on_earth,flux_from_fixed_distance, led_values, 0.01);
+      break;  
+    case 3: 
+      starmode += fade(flux_from_fixed_distance,flux_on_earth, led_values, 0.01);
+      break;
+    case 4: 
+      starmode += fade(flux_on_earth,flux_from_fixed_distance, led_values, 0.01);
+      break;    
+    case 5: 
+      starmode += fade(flux_from_fixed_distance,flux_zero, led_values, 0.01);
+      break;          
+   default:
+      starmode = 0;
   }
-  for(int i=0;i<NLED;i++){
-    led_values[i] = floor(4095.*exp(-(i-wave_x)*(i-wave_x)/(wave_width*wave_width)));
-  }
+  
+  
   for(int i=0;i<NLED;i++){
     write12bit(led_values[i]);
   }
-  
   latch();
   delay(1);
-
-
-  
-//  for(int i=0; i<Nstars; i++){
-//    
-//    //if (i!=act) v = 0;
-//    if (starmode==0){
-//      int v = int(fade*mag2flux(starsmag[i]));
-//      int vabs = int((1.-fade)*magabs2flux(starsmagabs[i]));
-//      write12bit(v+vabs);
-//    }
-//    if (starmode==1){
-//      int v = int((1.-fade)*mag2flux(starsmag[i]));
-//      int vabs = int(fade*magabs2flux(starsmagabs[i]));
-//      write12bit(v+vabs);
-//    }
-//    if (starmode==2){
-//      int v = 0;
-//      if (floor(fade*8.)==i) v = 4095;
-//      write12bit(v);
-//    }
-//    if (starmode==3){
-//      int v = int((1.-fade)*magabs2flux(starsmagabs[i]));
-//      write12bit(v);
-//    }
-//      
-//    
-//    //Serial.write("%d",v);
-//    //Serial.write("\n");
-//
-//  } 
-//  fade += 0.01;
-//  if (fade>1.){
-//    fade=0.;
-//    starmode +=1;
-//    if (starmode>=3) starmode =0;
-//  }
-//  
-//  //Serial.write("\n");
-//  latch();
-//  delay(10);
 
 }
